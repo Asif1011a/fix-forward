@@ -665,11 +665,11 @@ export default function App() {
     setLoading(true);
 
     try {
+      // buildHistory() returns all previous turns (React state not yet updated
+      // with the current message, so no need to manually add/remove it)
       const history = buildHistory();
-      // also add the message we just appended
-      history.push({ role: 'user', content: text });
 
-      const data = await sendChatMessage(text, history.slice(0, -1), language);
+      const data = await sendChatMessage(text, history, language);
 
       setMessages((prev) => [
         ...prev,

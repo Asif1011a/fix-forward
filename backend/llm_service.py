@@ -99,7 +99,7 @@ def get_legal_advice(user_message: str, history: list = None, language: str = "a
         if len(parts) >= 2:
             cleaned = parts[1]
             if cleaned.lower().startswith("json"):
-                cleaned = cleaned[4:]
+                cleaned = cleaned[4:].lstrip()
         cleaned = cleaned.strip()
 
     try:
