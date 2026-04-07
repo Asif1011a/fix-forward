@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8000';
+const BASE_URL = '';
 
 /**
  * Send a user message (with optional history) to NyayBot and receive structured legal advice.

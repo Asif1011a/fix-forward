@@ -692,7 +692,7 @@ export default function App() {
           id: nextId.current++,
           role: 'bot',
           content:
-            '❌ Sorry, I could not connect to the server. Please make sure the NyayBot backend is running on http://localhost:8000.',
+            '❌ Sorry, I could not connect to the server. Please make sure the NyayBot backend is running (port 8000).',
           is_structured: false,
         },
       ]);
