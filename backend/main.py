@@ -1,15 +1,17 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
+from typing import List, Optional
 
 from llm_service import get_legal_advice
 from pdf_generator import generate_legal_notice_pdf
+from dlsa_data import search_dlsa
 
 app = FastAPI(
     title="NyayBot API",
     description="AI-powered legal assistant backend for India",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 # ---------------------------------------------------------------------------
@@ -28,12 +30,24 @@ app.add_middleware(
 # Request / Response models
 # ---------------------------------------------------------------------------
 
+class HistoryItem(BaseModel):
+    role: str   # "user" or "assistant"
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
+    history: List[HistoryItem] = []
+    language: str = "auto"
 
 
 class ChatResponse(BaseModel):
     reply: str
+    applicable_law: str = ""
+    summary: str = ""
+    next_steps: List[str] = []
+    disclaimer: str = ""
+    is_structured: bool = False
 
 
 class GeneratePDFRequest(BaseModel):
@@ -58,14 +72,21 @@ def root():
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     """
-    Accept a user message describing their legal problem and return simplified
-    legal advice from the LLM (Groq-hosted Llama 3).
+    Accept a user message (with optional conversation history) and return
+    structured legal advice from the LLM (Groq-hosted Llama 3).
+    Multi-turn history is passed so the LLM can maintain conversational context.
     """
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
+    history = [{"role": h.role, "content": h.content} for h in request.history]
+
     try:
-        reply = get_legal_advice(request.message)
+        result = get_legal_advice(
+            user_message=request.message,
+            history=history,
+            language=request.language,
+        )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
@@ -74,7 +95,7 @@ def chat(request: ChatRequest):
             detail=f"Error communicating with the AI provider: {str(e)}",
         )
 
-    return ChatResponse(reply=reply)
+    return ChatResponse(**result)
 
 
 @app.post("/api/generate-pdf")
@@ -109,3 +130,36 @@ def generate_pdf(request: GeneratePDFRequest):
             "Content-Disposition": "attachment; filename=NyayBot_Legal_Notice.pdf"
         },
     )
+
+
+@app.get("/api/dlsa")
+def dlsa_search(q: Optional[str] = Query(default="", description="District or state name to search")):
+    """
+    Search for the nearest District Legal Services Authority (DLSA).
+    Returns matching entries from a static list covering 30+ districts across India.
+    If no query is provided, returns the first 10 entries.
+    """
+    results = search_dlsa(q or "")
+    return JSONResponse(content={"results": results, "count": len(results)})
+
+
+@app.post("/api/webhook/whatsapp")
+async def whatsapp_webhook(request_body: dict = None):
+    """
+    Placeholder Twilio WhatsApp webhook endpoint.
+    In production, connect this to a Twilio WhatsApp number and process
+    incoming messages by calling get_legal_advice() and replying via Twilio's
+    Messaging API.
+
+    Expected Twilio POST fields: Body (message text), From (sender number), To (NyayBot number).
+    Returns a TwiML XML response.
+    """
+    # Placeholder TwiML response — replace with real Twilio integration
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response>"
+        "<Message>Namaste! NyayBot WhatsApp integration is coming soon. "
+        "For now, please use our web app or call NALSA at 15100.</Message>"
+        "</Response>"
+    )
+    return Response(content=twiml, media_type="application/xml")

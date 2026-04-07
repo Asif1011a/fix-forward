@@ -3,13 +3,19 @@ import axios from 'axios';
 const BASE_URL = 'http://localhost:8000';
 
 /**
- * Send a user message to NyayBot and receive legal advice.
+ * Send a user message (with optional history) to NyayBot and receive structured legal advice.
  * @param {string} message - The user's legal problem description.
- * @returns {Promise<string>} - The AI's reply.
+ * @param {Array<{role: string, content: string}>} history - Previous conversation turns.
+ * @param {string} language - Preferred response language ('auto', 'English', 'Hindi', 'Tamil').
+ * @returns {Promise<Object>} - Structured response: { reply, applicable_law, summary, next_steps, disclaimer, is_structured }
  */
-export async function sendChatMessage(message) {
-  const response = await axios.post(`${BASE_URL}/api/chat`, { message });
-  return response.data.reply;
+export async function sendChatMessage(message, history = [], language = 'auto') {
+  const response = await axios.post(`${BASE_URL}/api/chat`, {
+    message,
+    history,
+    language,
+  });
+  return response.data;
 }
 
 /**
@@ -30,3 +36,16 @@ export async function generatePDF(params) {
   });
   return response.data;
 }
+
+/**
+ * Search for DLSA (District Legal Services Authority) offices near a location.
+ * @param {string} query - District or state name.
+ * @returns {Promise<Array>} - Array of DLSA entries.
+ */
+export async function searchDLSA(query) {
+  const response = await axios.get(`${BASE_URL}/api/dlsa`, {
+    params: { q: query },
+  });
+  return response.data.results || [];
+}
+
