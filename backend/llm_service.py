@@ -1,3 +1,4 @@
+import json
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -24,20 +25,32 @@ Core responsibilities:
 
 2. Explain the user's rights in simple, plain language. Avoid legal jargon. Write as if you are explaining to a Class 8 student.
 
-3. Tell the user exactly what their next step should be — which form to fill, which office to visit, or which helpline to call.
+3. Provide 3-4 clear, actionable next steps. Always end with: Call NALSA at 15100 for free legal aid.
 
-4. Always mention NALSA (National Legal Services Authority) helpline 15100, which provides free legal aid to any Indian citizen.
+4. Respond in the same language the user writes in. If they write in Hindi, reply in Hindi. If in English, reply in English.
 
-5. Respond in the same language the user writes in. If they write in Hindi, reply in Hindi. If in English, reply in English.
+CRITICAL INSTRUCTION: You MUST respond with ONLY valid JSON — no markdown, no code fences, no extra text.
+Use this exact format:
+{
+  "applicable_law": "Name of the primary Indian law applicable to the problem",
+  "summary": "Plain language explanation of the user's rights (2-4 sentences, in the user's language)",
+  "next_steps": [
+    "First action the user should take",
+    "Second action",
+    "Third action",
+    "Call NALSA at 15100 for free legal aid"
+  ],
+  "disclaimer": "NyayBot provides legal information, not legal advice. For your specific case, please verify with your nearest District Legal Services Authority (DLSA) or call NALSA at 15100."
+}"""
 
-6. IMPORTANT: Always include a disclaimer: "NyayBot provides legal information, not legal advice. For your specific case, please verify with your nearest District Legal Services Authority (DLSA) or call NALSA at 15100."
 
-Keep your responses concise, warm, and empowering. The goal is to make the user feel that they have rights and that justice is accessible to them."""
-
-
-def get_legal_advice(user_message: str) -> str:
+def get_legal_advice(user_message: str, history: list = None, language: str = "auto") -> dict:
     """
-    Send a user message to the Groq-hosted LLM and return the legal advice response.
+    Send a user message (with optional conversation history) to the Groq-hosted LLM
+    and return a structured legal advice response.
+
+    Returns a dict with keys: applicable_law, summary, next_steps, disclaimer,
+    is_structured, reply.
 
     Uses the standard OpenAI Python client pointed at Groq's OpenAI-compatible endpoint.
     To switch providers, simply change GROQ_API_KEY and the base_url below.
@@ -53,14 +66,62 @@ def get_legal_advice(user_message: str) -> str:
         base_url="https://api.groq.com/openai/v1",
     )
 
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Append conversation history for multi-turn context
+    if history:
+        for turn in history:
+            role = turn.get("role", "user")
+            content = turn.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+    # Append language preference note if explicitly set
+    content = user_message
+    if language and language.lower() not in ("auto", ""):
+        content = f"{user_message}\n\n[Please respond in {language}.]"
+    messages.append({"role": "user", "content": content})
+
     response = client.chat.completions.create(
         model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
+        messages=messages,
         temperature=0.3,
         max_tokens=1024,
     )
 
-    return response.choices[0].message.content
+    raw = response.choices[0].message.content.strip()
+
+    # Attempt to parse JSON — strip accidental markdown fences if present
+    cleaned = raw
+    if cleaned.startswith("```"):
+        parts = cleaned.split("```")
+        # parts[1] is the content between first pair of fences
+        if len(parts) >= 2:
+            cleaned = parts[1]
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    try:
+        result = json.loads(cleaned)
+        return {
+            "reply": result.get("summary", raw),
+            "applicable_law": result.get("applicable_law", ""),
+            "summary": result.get("summary", raw),
+            "next_steps": result.get("next_steps", []),
+            "disclaimer": result.get("disclaimer", ""),
+            "is_structured": True,
+        }
+    except (json.JSONDecodeError, AttributeError):
+        # Graceful fallback to plain text
+        return {
+            "reply": raw,
+            "applicable_law": "",
+            "summary": raw,
+            "next_steps": [],
+            "disclaimer": (
+                "NyayBot provides legal information, not legal advice. "
+                "For your specific case, please verify with your nearest DLSA or call NALSA at 15100."
+            ),
+            "is_structured": False,
+        }
