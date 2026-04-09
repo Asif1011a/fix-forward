@@ -1,5 +1,5 @@
-import json
 import os
+import json
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -8,58 +8,49 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192")
 
-SYSTEM_PROMPT = """You are NyayBot, an expert AI legal assistant specializing in Indian law.
-Your role is to help ordinary Indian citizens — including those from low-income backgrounds — understand their legal rights and identify the correct law that applies to their situation.
+SYSTEM_PROMPT = """You are NyayBot, a world-class institutional legal AI for India. Your objective is to provide executive-grade legal strategy OR direct factual lookups based on user intent.
 
-Core responsibilities:
-1. Identify the most relevant Indian law(s) for the user's problem. Focus on:
-   - Bharatiya Nyaya Sanhita (BNS) 2023 — the replacement for the Indian Penal Code (IPC), effective July 2024
-   - Consumer Protection Act 2019 — for cheating, defective products, online fraud
-   - Payment of Wages Act 1936 — for unpaid salary or wage disputes
-   - Protection of Women from Domestic Violence Act 2005 — for domestic abuse
-   - Right to Information (RTI) Act 2005 — for government non-response
-   - Transfer of Property Act / Rent Control Acts — for landlord-tenant disputes
-   - Indian Contract Act 1872 — for breach of contract
-   - Scheduled Castes and Scheduled Tribes (Prevention of Atrocities) Act 1989 — for caste-based discrimination
-   - Any other applicable Indian central or state legislation
+ADAPTIVE INTENT PROTOCOL:
+1. INTENT RECOGNITION: Determine if the query is "STRATEGIC" (legal dispute) or "FACTUAL" (lookup).
+2. STRATEGIC METRICS: For every response, you must provide a "strategic_metrics" analysis.
+   - URGENCY: "CRITICAL" | "HIGH" | "MEDIUM" | "INITIAL"
+   - MERIT: A percentage (string, e.g., "85%") representing the strength of the user's legal standing.
+   - POSTURE: "AGGRESSIVE" | "NEUTRAL" | "DEFENSIVE"
+   - COMPLEXITY: "HIGH" | "MEDIUM" | "LOW"
 
-2. Explain the user's rights in simple, plain language. Avoid legal jargon. Write as if you are explaining to a Class 8 student.
+RULES:
+1. RESPONSE FORMAT: You MUST return ONLY a valid JSON object.
+2. CONTEXTUAL INTELLIGENCE: analyze history (up to 12 turns) to ensure additive advice.
+3. QUALITY: Ensure "applicable_law" is a legally precise Indian statute.
 
-3. Provide 3-4 clear, actionable next steps. Always end with: Call NALSA at 15100 for free legal aid.
-
-4. Respond in the same language the user writes in. If they write in Hindi, reply in Hindi. If in English, reply in English.
-
-CRITICAL INSTRUCTION: You MUST respond with ONLY valid JSON — no markdown, no code fences, no extra text.
-Use this exact format:
+JSON STRUCTURE:
 {
-  "applicable_law": "Name of the primary Indian law applicable to the problem",
-  "summary": "Plain language explanation of the user's rights (2-4 sentences, in the user's language)",
-  "next_steps": [
-    "First action the user should take",
-    "Second action",
-    "Third action",
-    "Call NALSA at 15100 for free legal aid"
-  ],
-  "disclaimer": "NyayBot provides legal information, not legal advice. For your specific case, please verify with your nearest District Legal Services Authority (DLSA) or call NALSA at 15100."
+  "applicable_law": "Full name of the Indian Statute",
+  "act_description": "Purpose of the act.",
+  "precedent_case": "Relevant Landmark Verdict.",
+  "precedent_reasoning": "Application ratio.",
+  "summary": "Direct answer or Executive brief.",
+  "is_urgent": boolean,
+  "strategic_metrics": {
+    "urgency": "CRITICAL",
+    "merit": "85%",
+    "posture": "AGGRESSIVE",
+    "complexity": "HIGH"
+  },
+  "formal_draft": "Professional drafting sample.",
+  "emergency_type": "cybercrime" | "domestic_violence" | "medical" | "police_harassment" | "none",
+  "next_steps": [{"title": "Step Title", "description": "Specific action"}],
+  "disclaimer": "NyayBot institutional legal information."
 }"""
 
 
-def get_legal_advice(user_message: str, history: list = None, language: str = "auto") -> dict:
+def get_legal_advice_stream(user_message: str, history: list = None, language: str = "auto"):
     """
-    Send a user message (with optional conversation history) to the Groq-hosted LLM
-    and return a structured legal advice response.
-
-    Returns a dict with keys: applicable_law, summary, next_steps, disclaimer,
-    is_structured, reply.
-
-    Uses the standard OpenAI Python client pointed at Groq's OpenAI-compatible endpoint.
-    To switch providers, simply change GROQ_API_KEY and the base_url below.
+    Generator that streams a legal response.
+    Yields tokens from the LLM.
     """
     if not GROQ_API_KEY:
-        raise ValueError(
-            "GROQ_API_KEY is not set. Please copy backend/.env.example to backend/.env "
-            "and add your Groq API key from https://console.groq.com"
-        )
+        raise ValueError("GROQ_API_KEY is not set.")
 
     client = OpenAI(
         api_key=GROQ_API_KEY,
@@ -67,8 +58,6 @@ def get_legal_advice(user_message: str, history: list = None, language: str = "a
     )
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    # Append conversation history for multi-turn context
     if history:
         for turn in history:
             role = turn.get("role", "user")
@@ -76,52 +65,66 @@ def get_legal_advice(user_message: str, history: list = None, language: str = "a
             if role in ("user", "assistant") and content:
                 messages.append({"role": role, "content": content})
 
-    # Append language preference note if explicitly set
     content = user_message
     if language and language.lower() not in ("auto", ""):
         content = f"{user_message}\n\n[Please respond in {language}.]"
     messages.append({"role": "user", "content": content})
 
-    response = client.chat.completions.create(
+    response_stream = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=messages,
         temperature=0.3,
-        max_tokens=1024,
+        max_tokens=1500,
+        stream=True,
     )
 
+    for chunk in response_stream:
+        token = chunk.choices[0].delta.content or ""
+        if token:
+            yield token
+
+def get_legal_advice(user_message: str, history: list = None, language: str = "auto") -> dict:
+    client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if history:
+        for turn in history:
+            messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+    
+    content = user_message
+    if language and language.lower() not in ("auto", ""):
+        content = f"{user_message}\n\n[Please respond in {language}.]"
+    messages.append({"role": "user", "content": content})
+
+    response = client.chat.completions.create(model=GROQ_MODEL, messages=messages, temperature=0.3)
     raw = response.choices[0].message.content.strip()
+    return parse_legal_json(raw)
 
-    # Attempt to parse JSON — strip accidental markdown fences if present
+def parse_legal_json(raw: str) -> dict:
     cleaned = raw
-    if cleaned.startswith("```"):
-        parts = cleaned.split("```")
-        # parts[1] is the content between first pair of fences
-        if len(parts) >= 2:
-            cleaned = parts[1]
-            if cleaned.lower().startswith("json"):
-                cleaned = cleaned[4:].lstrip()
-        cleaned = cleaned.strip()
-
+    if "```json" in cleaned:
+        cleaned = cleaned.split("```json")[-1].split("```")[0].strip()
+    elif "```" in cleaned:
+        cleaned = cleaned.split("```")[-1].split("```")[0].strip()
+    if "{" in cleaned and "}" in cleaned:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}") + 1
+        cleaned = cleaned[start:end]
     try:
         result = json.loads(cleaned)
         return {
-            "reply": result.get("summary", raw),
+            "reply": result.get("summary", ""),
             "applicable_law": result.get("applicable_law", ""),
-            "summary": result.get("summary", raw),
+            "act_description": result.get("act_description", ""),
+            "precedent_case": result.get("precedent_case", ""),
+            "precedent_reasoning": result.get("precedent_reasoning", ""),
+            "summary": result.get("summary", ""),
+            "formal_draft": result.get("formal_draft", ""),
+            "is_urgent": result.get("is_urgent", False),
+            "strategic_metrics": result.get("strategic_metrics", {}),
+            "emergency_type": result.get("emergency_type", "none"),
             "next_steps": result.get("next_steps", []),
             "disclaimer": result.get("disclaimer", ""),
             "is_structured": True,
         }
-    except (json.JSONDecodeError, AttributeError):
-        # Graceful fallback to plain text
-        return {
-            "reply": raw,
-            "applicable_law": "",
-            "summary": raw,
-            "next_steps": [],
-            "disclaimer": (
-                "NyayBot provides legal information, not legal advice. "
-                "For your specific case, please verify with your nearest DLSA or call NALSA at 15100."
-            ),
-            "is_structured": False,
-        }
+    except:
+        return {"reply": raw, "is_structured": False}

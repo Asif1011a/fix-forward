@@ -1,854 +1,967 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Scale, FileText, Phone, MapPin, Loader2, Bot, User,
-  Mic, MicOff, Menu, X, Search, Globe, ChevronRight,
+  Mic, MicOff, Menu, X, Search, Globe, ChevronRight, Sparkles,
+  Moon, Sun, Volume2, VolumeX, AlertTriangle, Archive, Clock, Trash2, Copy,
+  CheckCircle2, Info, Gavel, ShieldCheck, History, Plus
 } from 'lucide-react';
-import { sendChatMessage, generatePDF, searchDLSA } from './api';
+import { sendChatMessage, streamChatMessage, generatePDF, searchDLSA } from './api';
+import { LEGAL_NEWS, getStrategicMetrics } from './legal_news';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants & Configuration
 // ---------------------------------------------------------------------------
 
-const DISCLAIMER_ACCEPTED_KEY = 'nyaybot_disclaimer_accepted';
+const DISCLAIMER_ACCEPTED_KEY = 'nyaybot_disclaimer_accepted_v5';
+const SESSIONS_STORAGE_KEY = 'nyaybot_legal_vault_v1';
 
 const EXAMPLE_PROMPTS = [
-  'Landlord ne deposit wapas nahi kiya',
-  'My employer has not paid my salary for 2 months',
-  'I received a defective product online',
-  'I want to file an RTI — government office is not responding',
-  'Domestic violence — what are my rights?',
-  'Caste-based discrimination at workplace',
+  { text: 'Landlord deposit issue', icon: <Info size={14} /> },
+  { text: 'Salary not paid for 2 months', icon: <FileText size={14} /> },
+  { text: 'Defective product online', icon: <ShieldCheck size={14} /> },
+  { text: 'Domestic violence rights', icon: <AlertTriangle size={14} /> },
+  { text: 'RTI filing procedure', icon: <Scale size={14} /> },
 ];
 
 const LANGUAGE_OPTIONS = [
   { value: 'auto', label: '🌐 Auto-detect' },
-  { value: 'English', label: 'English' },
+  { value: 'English', label: 'English (India)' },
   { value: 'Hindi', label: 'हिंदी (Hindi)' },
   { value: 'Tamil', label: 'தமிழ் (Tamil)' },
 ];
 
 // ---------------------------------------------------------------------------
-// Feature 7: Legal Disclaimer Modal (one-time, localStorage)
+// Premium Shared Components
 // ---------------------------------------------------------------------------
 
+/**
+ * High-End Disclaimer Modal with backdrop blur
+ */
 function DisclaimerModal({ onAccept }) {
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.6)',
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(2, 6, 23, 0.5)', backdropFilter: 'blur(20px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '16px',
+        padding: '24px', animation: 'fadeIn 0.5s ease'
       }}
     >
       <div
+        className="glass-panel"
         style={{
-          background: '#fff', borderRadius: '16px', padding: '32px',
-          maxWidth: '480px', width: '100%',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          borderRadius: 'var(--radius-xl)', padding: '48px',
+          maxWidth: '540px', width: '100%',
+          boxShadow: 'var(--shadow-lg)', animation: 'slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+          border: '1px solid var(--border-strong)',
+          textAlign: 'center'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <Scale size={32} color="#1a237e" />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
+          <div style={{ background: 'var(--primary)', padding: '20px', borderRadius: '24px', boxShadow: 'var(--shadow-primary)' }}>
+            <Scale size={40} color="#fff" />
+          </div>
           <div>
-            <h2 style={{ margin: 0, color: '#1a237e', fontSize: '20px' }}>Welcome to NyayBot</h2>
-            <p style={{ margin: 0, fontSize: '13px', color: '#757575' }}>AI Legal Assistant for India</p>
+            <h2 style={{ margin: 0, color: 'var(--text)', fontSize: '32px', fontWeight: '800', fontFamily: 'Outfit' }}>NyayBot Enterprise</h2>
+            <p style={{ margin: '8px 0 0', fontSize: '16px', color: 'var(--text3)', fontWeight: '500' }}>Indian Legal Intelligence & Strategy Suite</p>
           </div>
         </div>
 
-        <p style={{ fontSize: '14px', color: '#424242', lineHeight: '1.6', marginBottom: '16px' }}>
-          Before you begin, please note:
-        </p>
-
-        <ul style={{ paddingLeft: '20px', margin: '0 0 20px', fontSize: '14px', color: '#424242', lineHeight: '1.8' }}>
-          <li>NyayBot provides <strong>legal information</strong>, not legal advice.</li>
-          <li>Information may not cover your specific circumstances.</li>
-          <li>Always verify with a qualified lawyer or your nearest DLSA.</li>
-          <li>For emergencies, call <strong>NALSA at 15100</strong> (free legal aid).</li>
-        </ul>
+        <div style={{ background: 'var(--bg-app)', border: '1px solid var(--border-strong)', padding: '24px', borderRadius: 'var(--radius)', margin: '0 0 40px', textAlign: 'left' }}>
+          <ul style={{ listStyle: 'none', fontSize: '15px', color: 'var(--text2)', lineHeight: '1.8' }}>
+            <li style={{ marginBottom: '12px', display: 'flex', gap: '12px' }}>
+              <CheckCircle2 size={18} color="var(--primary)" style={{ flexShrink: 0, marginTop: '4px' }} />
+              <span>Informational guidance based on Indian Statutes.</span>
+            </li>
+            <li style={{ marginBottom: '12px', display: 'flex', gap: '12px' }}>
+              <CheckCircle2 size={18} color="var(--primary)" style={{ flexShrink: 0, marginTop: '4px' }} />
+              <span>Not a substitute for a licensed Legal Practitioner.</span>
+            </li>
+            <li style={{ display: 'flex', gap: '12px' }}>
+              <CheckCircle2 size={18} color="var(--primary)" style={{ flexShrink: 0, marginTop: '4px' }} />
+              <span>Urgent matters should be reported to <strong>NALSA (15100)</strong>.</span>
+            </li>
+          </ul>
+        </div>
 
         <button
           onClick={onAccept}
-          style={{
-            width: '100%', background: '#1a237e', color: '#fff',
-            border: 'none', borderRadius: '10px', padding: '14px',
-            fontSize: '15px', fontWeight: '700', cursor: 'pointer',
-          }}
+          className="btn-hover focus-ring"
+          style={{ width: '100%', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '20px', fontSize: '17px', fontWeight: '700', cursor: 'pointer', boxShadow: 'var(--shadow-primary)' }}
         >
-          I Understand — Get Started 🙏
+          Initialize Command Center
         </button>
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// PDF Download Button
-// ---------------------------------------------------------------------------
-
-function PDFButton({ applicableLaw, complaintText }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleDownload() {
-    setLoading(true);
-    setError('');
-    try {
-      const blob = await generatePDF({
-        applicable_law: applicableLaw,
-        complaint_text: complaintText,
-        user_language: 'English',
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'NyayBot_Legal_Notice.pdf';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError('Could not generate PDF. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
+/**
+ * Interactive Action Checklist with Vertical Timeline
+ */
+/**
+ * Cinematic Strategy Roadmap with High-Contrast Nodes
+ */
+function ActionTimeline({ steps }) {
+  if (!steps || !Array.isArray(steps) || steps.length === 0) return null;
 
   return (
-    <div style={{ marginTop: '12px' }}>
+    <div style={{ marginTop: '32px', position: 'relative' }}>
+      <h3 style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '32px', letterSpacing: '2px' }}>Operational Roadmap</h3>
+      <div style={{ position: 'relative' }}>
+        {steps.map((step, idx) => {
+          const isLast = idx === steps.length - 1;
+          const title = typeof step === 'string' ? `Step ${idx + 1}` : step.title;
+          const desc = typeof step === 'string' ? step : step.description;
+
+          return (
+            <div key={idx} style={{ display: 'flex', gap: '24px', marginBottom: '48px', position: 'relative', animation: `slideUp 0.6s ease forwards`, animationDelay: `${idx * 0.15}s`, opacity: 0 }}>
+              {!isLast && <div className="roadmap-connection" />}
+
+              <div className="roadmap-node" style={{ animation: 'glowPulse 3s infinite', animationDelay: `${idx * 0.15}s` }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)' }}>{idx + 1}</span>
+              </div>
+
+              <div className="premium-card" style={{ flex: 1, padding: '20px', border: '1px solid var(--border-strong)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: 'var(--text)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{title}</p>
+                <p style={{ margin: 0, fontSize: '15px', color: 'var(--text2)', lineHeight: '1.6', fontWeight: '500' }}>{desc}</p>
+                <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
+                  <div style={{ background: 'var(--primary-light)', color: 'var(--primary)', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: '800' }}>{idx === 0 ? 'IMMEDIATE' : 'STRATEGIC'}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PDFButton({ onClick, loading }) {
+  return (
+    <div style={{ marginTop: '24px' }}>
       <button
-        onClick={handleDownload}
+        onClick={onClick}
         disabled={loading}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          background: loading ? '#9e9e9e' : '#2e7d32',
-          color: '#fff', border: 'none', borderRadius: '8px',
-          padding: '8px 14px', fontSize: '13px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          fontWeight: '600', transition: 'background 0.2s',
-        }}
+        className="btn-hover focus-ring"
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '18px 24px', fontSize: '15px', cursor: 'pointer', fontWeight: '700', boxShadow: 'var(--shadow-primary)', width: '100%' }}
       >
-        {loading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <FileText size={14} />}
-        {loading ? 'Generating PDF…' : 'Download Legal Notice PDF'}
+        {loading ? <Loader2 size={20} className="spin" /> : <ShieldCheck size={20} />}
+        {loading ? 'Processing...' : 'Generate Legal Document'}
       </button>
-      {error && <p style={{ color: '#c62828', fontSize: '12px', marginTop: '6px' }}>{error}</p>}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Feature 4: Structured response renderer
-// ---------------------------------------------------------------------------
+function NoticeDetailsModal({ onGenerate, onCancel, docType, setDocType }) {
+  const [complainantName, setComplainantName] = useState('');
+  const [complainantAddress, setComplainantAddress] = useState('');
+  const [respondentName, setRespondentName] = useState('');
+  const [respondentAddress, setRespondentAddress] = useState('');
 
-function StructuredResponse({ data, userMessage }) {
   return (
-    <div>
-      {/* Applicable Law badge */}
-      {data.applicable_law && (
-        <div
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            background: '#e8eaf6', color: '#1a237e',
-            borderRadius: '20px', padding: '4px 12px',
-            fontSize: '12px', fontWeight: '700',
-            marginBottom: '10px', border: '1px solid #c5cae9',
-          }}
-        >
-          <Scale size={12} />
-          {data.applicable_law}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2, 6, 23, 0.5)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div className="glass-panel" style={{ borderRadius: 'var(--radius-xl)', maxWidth: '540px', width: '100%', maxHeight: '85vh', overflow: 'hidden', border: '1px solid var(--border-glow)', boxShadow: '0 0 100px rgba(59, 130, 246, 0.2)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '40px 40px 24px', borderBottom: '1px solid var(--border)' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '900', color: 'var(--text)', letterSpacing: '-0.5px', margin: 0 }}>Drafting Prerequisites</h2>
+          <p style={{ margin: '8px 0 0', fontSize: '13px', color: 'var(--text3)', fontWeight: '500' }}>Define the situational parameters for your legal instrument.</p>
         </div>
-      )}
-
-      {/* Summary */}
-      <p style={{ margin: '0 0 12px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-        {data.summary}
-      </p>
-
-      {/* Next Steps */}
-      {data.next_steps && data.next_steps.length > 0 && (
-        <div style={{ marginBottom: '12px' }}>
-          <p style={{ margin: '0 0 6px', fontWeight: '700', fontSize: '13px', color: '#1a237e' }}>
-            📋 Next Steps:
-          </p>
-          <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', lineHeight: '1.8' }}>
-            {data.next_steps.map((step, i) => (
-              <li key={i}>{step}</li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {/* Disclaimer */}
-      {data.disclaimer && (
-        <p style={{ margin: '0 0 12px', fontSize: '11px', color: '#9e9e9e', fontStyle: 'italic' }}>
-          ⚠️ {data.disclaimer}
-        </p>
-      )}
-
-      {/* PDF Download */}
-      {data.applicable_law && (
-        <PDFButton
-          applicableLaw={data.applicable_law}
-          complaintText={userMessage}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Chat Message
-// ---------------------------------------------------------------------------
-
-function ChatMessage({ message }) {
-  const isUser = message.role === 'user';
-  return (
-    <div
-      style={{
-        display: 'flex', gap: '10px', marginBottom: '16px',
-        flexDirection: isUser ? 'row-reverse' : 'row',
-        alignItems: 'flex-start',
-      }}
-    >
-      {/* Avatar */}
-      <div
-        style={{
-          width: '36px', height: '36px', borderRadius: '50%',
-          background: isUser ? '#1a237e' : '#e8f5e9',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0, border: isUser ? 'none' : '1px solid #c8e6c9',
-        }}
-      >
-        {isUser ? <User size={18} color="#fff" /> : <Bot size={18} color="#2e7d32" />}
-      </div>
-
-      {/* Bubble */}
-      <div
-        style={{
-          maxWidth: '75%',
-          background: isUser ? '#1a237e' : '#f8f9fa',
-          color: isUser ? '#ffffff' : '#212121',
-          borderRadius: isUser ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
-          padding: '12px 16px', fontSize: '14px', lineHeight: '1.6',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-        }}
-      >
-        {isUser ? (
-          <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{message.content}</span>
-        ) : message.is_structured ? (
-          <StructuredResponse data={message} userMessage={message.userMessage} />
-        ) : (
-          <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{message.content}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Feature 9: Example Prompt Chips
-// ---------------------------------------------------------------------------
-
-function PromptChips({ onSelect }) {
-  return (
-    <div style={{ marginBottom: '20px' }}>
-      <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#757575', textAlign: 'center' }}>
-        💡 Try one of these examples:
-      </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-        {EXAMPLE_PROMPTS.map((prompt) => (
-          <button
-            key={prompt}
-            onClick={() => onSelect(prompt)}
-            style={{
-              background: '#e8eaf6', color: '#1a237e',
-              border: '1px solid #c5cae9', borderRadius: '20px',
-              padding: '6px 14px', fontSize: '13px',
-              cursor: 'pointer', transition: 'background 0.15s',
-              display: 'flex', alignItems: 'center', gap: '4px',
-            }}
-            onMouseEnter={(e) => (e.target.style.background = '#c5cae9')}
-            onMouseLeave={(e) => (e.target.style.background = '#e8eaf6')}
-          >
-            <ChevronRight size={12} />
-            {prompt}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Feature 5: DLSA Search (inside Sidebar)
-// ---------------------------------------------------------------------------
-
-function DLSASearch() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-
-  async function doSearch() {
-    if (!query.trim()) return;
-    setLoading(true);
-    setSearched(true);
-    try {
-      const data = await searchDLSA(query.trim());
-      setResults(data);
-    } catch {
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div>
-      <h3
-        style={{
-          margin: '0 0 10px 0', fontSize: '13px', color: '#ffd600',
-          textTransform: 'uppercase', letterSpacing: '0.5px',
-        }}
-      >
-        🏛️ Find Your DLSA
-      </h3>
-
-      <div style={{ display: 'flex', gap: '4px' }}>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && doSearch()}
-          placeholder="Enter district name…"
-          style={{
-            flex: 1, background: '#283593', color: '#fff',
-            border: '1px solid #3949ab', borderRadius: '8px',
-            padding: '7px 10px', fontSize: '12px', outline: 'none',
-          }}
-        />
-        <button
-          onClick={doSearch}
-          disabled={loading}
-          style={{
-            background: '#ffd600', border: 'none', borderRadius: '8px',
-            padding: '7px 10px', cursor: 'pointer', display: 'flex',
-            alignItems: 'center',
-          }}
-        >
-          {loading ? <Loader2 size={14} color="#1a237e" style={{ animation: 'spin 1s linear infinite' }} /> : <Search size={14} color="#1a237e" />}
-        </button>
-      </div>
-
-      {searched && results.length === 0 && !loading && (
-        <p style={{ fontSize: '12px', color: '#9fa8da', marginTop: '8px' }}>
-          No DLSA found. Try a different district name.
-        </p>
-      )}
-
-      <div style={{ marginTop: '8px', maxHeight: '180px', overflowY: 'auto' }}>
-        {results.map((r) => (
-          <div
-            key={`${r.district}-${r.state}`}
-            style={{
-              background: '#283593', borderRadius: '8px', padding: '10px',
-              marginBottom: '6px', fontSize: '12px',
-            }}
-          >
-            <p style={{ margin: '0 0 4px', fontWeight: '700', color: '#fff', fontSize: '13px' }}>
-              {r.district}, {r.state}
-            </p>
-            <p style={{ margin: '0 0 2px', color: '#c5cae9' }}>{r.address}</p>
-            <p style={{ margin: '0 0 2px', color: '#ffd600' }}>📞 {r.phone}</p>
-            {r.email && (
-              <p style={{ margin: 0, color: '#82b1ff', fontSize: '11px' }}>✉ {r.email}</p>
-            )}
+        
+        <div className="modal-body no-scrollbar" style={{ padding: '24px 40px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '900', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '1px' }}>Document Protocol</label>
+              <PremiumSelect 
+                value={docType} 
+                onChange={setDocType} 
+                options={[
+                  { value: 'notice', label: 'Official Legal Notice' },
+                  { value: 'fir', label: 'Police FIR Draft' },
+                  { value: 'complaint', label: 'Civil Complaint Draft' }
+                ]}
+                icon={FileText}
+              />
+            </div>
+            
+            <InputField label="Claimant Principal Name" value={complainantName} onChange={setComplainantName} placeholder="Full Legal Identity" />
+            <InputField label="Claimant Registered Address" value={complainantAddress} onChange={setComplainantAddress} placeholder="City, District, State" />
+            <InputField label="Respondent Principal Name" value={respondentName} onChange={setRespondentName} placeholder="Opposing Party Entity" />
+            <InputField label="Respondent Known Address" value={respondentAddress} onChange={setRespondentAddress} placeholder="Street, City, Pincode" />
           </div>
-        ))}
+        </div>
+        
+        <div className="modal-footer" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-solid)', padding: '24px 40px', display: 'flex', gap: '12px' }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: '16px', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '14px', fontWeight: '800', cursor: 'pointer' }} className="btn-hover">ABORT DRAFT</button>
+          <button onClick={() => onGenerate({ complainantName, complainantAddress, respondentName, respondentAddress })} className="btn-hover" style={{ flex: 2, background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', padding: '16px', fontWeight: '900', fontSize: '14px', boxShadow: 'var(--shadow-primary)', cursor: 'pointer' }}>INITIALIZE GENERATION</button>
+        </div>
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Feature 3: Language Selector
-// ---------------------------------------------------------------------------
-
-function LanguageSelector({ value, onChange }) {
+function InputField({ label, value, onChange, placeholder }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <Globe size={14} color="#9fa8da" />
-      <select
+    <div>
+      <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>{label}</label>
+      <input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          background: '#283593', color: '#fff',
-          border: '1px solid #3949ab', borderRadius: '6px',
-          padding: '4px 8px', fontSize: '12px', cursor: 'pointer',
-          outline: 'none',
-        }}
-      >
-        {LANGUAGE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="focus-ring"
+        style={{ width: '100%', padding: '14px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text)', outline: 'none', fontSize: '15px' }}
+      />
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Feature 8: Sidebar (mobile-aware)
-// ---------------------------------------------------------------------------
-
-function Sidebar({ isOpen, onClose, isMobile, language, onLanguageChange }) {
-  if (isMobile && !isOpen) return null;
-
+function PDFPreviewModal({ pdfUrl, onDownload, onCancel }) {
   return (
-    <>
-      {/* Overlay for mobile */}
-      {isMobile && (
-        <div
-          onClick={onClose}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 50,
-            background: 'rgba(0,0,0,0.5)',
-          }}
-        />
-      )}
-
-      <aside
-        style={{
-          width: '270px', flexShrink: 0,
-          background: '#1a237e', color: '#fff',
-          display: 'flex', flexDirection: 'column',
-          padding: '20px 16px', gap: '16px', overflowY: 'auto',
-          ...(isMobile
-            ? {
-                position: 'fixed', top: 0, left: 0, bottom: 0,
-                zIndex: 100, boxShadow: '4px 0 20px rgba(0,0,0,0.4)',
-              }
-            : {}),
-        }}
-      >
-        {/* Close button on mobile */}
-        {isMobile && (
-          <button
-            onClick={onClose}
-            style={{
-              alignSelf: 'flex-end', background: 'transparent',
-              border: 'none', cursor: 'pointer', padding: '4px',
-            }}
-          >
-            <X size={20} color="#fff" />
-          </button>
-        )}
-
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Scale size={28} color="#ffd600" />
-          <div>
-            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#fff' }}>NyayBot</h1>
-            <p style={{ margin: 0, fontSize: '11px', color: '#c5cae9' }}>AI Legal Assistant for India</p>
-          </div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2, 6, 23, 0.7)', backdropFilter: 'blur(24px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px' }}>
+      <div className="glass-panel" style={{ borderRadius: 'var(--radius-xl)', padding: '24px', width: '100%', maxWidth: '900px', height: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text)' }}>System Draft Preview</h2>
+          <button onClick={onCancel} className="btn-hover" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '50%', padding: '8px', cursor: 'pointer' }}><X size={20} color="var(--text)" /></button>
         </div>
-
-        <hr style={{ borderColor: '#3949ab', margin: '0' }} />
-
-        {/* About */}
-        <p style={{ fontSize: '13px', color: '#c5cae9', lineHeight: '1.6', margin: 0 }}>
-          Describe your legal problem in <strong>Hindi, Tamil, or English</strong>.
-          NyayBot identifies the applicable Indian law and explains your rights for free.
-        </p>
-
-        <hr style={{ borderColor: '#3949ab', margin: '0' }} />
-
-        {/* Feature 3: Language Selector */}
-        <div>
-          <h3
-            style={{
-              margin: '0 0 8px 0', fontSize: '13px', color: '#ffd600',
-              textTransform: 'uppercase', letterSpacing: '0.5px',
-            }}
-          >
-            Response Language
-          </h3>
-          <LanguageSelector value={language} onChange={onLanguageChange} />
+        <iframe src={`${pdfUrl}#toolbar=0`} width="100%" height="100%" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }} />
+        <div style={{ marginTop: '24px', display: 'flex', gap: '16px', justifyContent: 'flex-end' }}>
+          <button onClick={onDownload} className="btn-hover" style={{ background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '16px 32px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px' }}><Copy size={18} /> Finalize Download</button>
         </div>
-
-        <hr style={{ borderColor: '#3949ab', margin: '0' }} />
-
-        {/* Feature 5: DLSA Search */}
-        <DLSASearch />
-
-        <hr style={{ borderColor: '#3949ab', margin: '0' }} />
-
-        {/* Free Legal Aid */}
-        <div>
-          <h3
-            style={{
-              margin: '0 0 10px 0', fontSize: '13px', color: '#ffd600',
-              textTransform: 'uppercase', letterSpacing: '0.5px',
-            }}
-          >
-            Free Legal Aid
-          </h3>
-
-          <div
-            style={{
-              background: '#283593', borderRadius: '10px', padding: '12px',
-              display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px',
-            }}
-          >
-            <Phone size={18} color="#ffd600" />
-            <div>
-              <p style={{ margin: 0, fontWeight: '700', fontSize: '16px', color: '#fff' }}>15100</p>
-              <p style={{ margin: 0, fontSize: '11px', color: '#c5cae9' }}>NALSA Free Legal Aid Helpline</p>
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: '#283593', borderRadius: '10px', padding: '12px',
-              display: 'flex', alignItems: 'center', gap: '10px',
-            }}
-          >
-            <MapPin size={18} color="#ffd600" />
-            <div>
-              <p style={{ margin: 0, fontWeight: '600', fontSize: '13px', color: '#fff' }}>Find your nearest DLSA</p>
-              <a
-                href="https://nalsa.gov.in/lsams"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: '#82b1ff', fontSize: '11px' }}
-              >
-                nalsa.gov.in/lsams →
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <hr style={{ borderColor: '#3949ab', margin: '0' }} />
-
-        {/* Disclaimer */}
-        <p style={{ fontSize: '11px', color: '#9fa8da', lineHeight: '1.5', margin: 0 }}>
-          ⚠️ NyayBot provides legal <em>information</em>, not legal advice. Verify with
-          your nearest DLSA or call NALSA at 15100 for your specific case.
-        </p>
-      </aside>
-    </>
+      </div>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Feature 1: Voice Input Button
-// ---------------------------------------------------------------------------
-
-function VoiceButton({ onResult, disabled }) {
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef(null);
-
-  const isSupported = typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
-
-  const startListening = useCallback(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      onResult(transcript);
-      setIsListening(false);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-
-    recognition.start();
-    recognitionRef.current = recognition;
-    setIsListening(true);
-  }, [onResult]);
-
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }, []);
-
-  if (!isSupported) return null;
-
+function VoiceOutputButton({ text }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const startSpeaking = () => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const cleanText = text.replace(/[*_#]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    const voices = window.speechSynthesis.getVoices();
+    // Prioritize high-quality Indian/Male voices
+    const maleVoice = voices.find(v => (v.name.includes('Male') || v.name.includes('David') || v.name.includes('Ravi') || v.name.includes('Google UK English Male')) && (v.lang.startsWith('en'))) || voices.find(v => v.name.includes('Male')) || voices[0];
+    if (maleVoice) utterance.voice = maleVoice;
+    utterance.lang = 'en-IN';
+    utterance.rate = 1.0;
+    utterance.onend = () => setIsPlaying(false);
+    utterance.onerror = () => setIsPlaying(false);
+    setIsPlaying(true);
+    window.speechSynthesis.speak(utterance);
+  };
   return (
     <button
-      onClick={isListening ? stopListening : startListening}
-      disabled={disabled}
-      title={isListening ? 'Stop listening' : 'Speak your question (Voice input)'}
-      style={{
-        background: isListening ? '#c62828' : '#3949ab',
-        border: 'none', borderRadius: '12px',
-        padding: '12px 14px', cursor: disabled ? 'not-allowed' : 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background 0.2s', flexShrink: 0,
-        animation: isListening ? 'pulse 1s ease-in-out infinite' : 'none',
-      }}
+      onClick={isPlaying ? () => { window.speechSynthesis.cancel(); setIsPlaying(false); } : startSpeaking}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: isPlaying ? 'var(--primary-light)' : 'transparent', color: isPlaying ? 'var(--primary-hover)' : 'var(--text3)', border: '1px solid var(--border)', borderRadius: '24px', padding: '8px 16px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
     >
-      {isListening
-        ? <MicOff size={18} color="#fff" />
-        : <Mic size={18} color="#fff" />}
+      {isPlaying ? <VolumeX size={16} /> : <Volume2 size={16} />} {isPlaying ? 'Stop' : 'Listen'}
     </button>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main App
-// ---------------------------------------------------------------------------
-
-export default function App() {
-  // Feature 7: Disclaimer modal
-  const [disclaimerAccepted, setDisclaimerAccepted] = useState(
-    () => localStorage.getItem(DISCLAIMER_ACCEPTED_KEY) === 'true'
-  );
-
-  // Messages (Feature 2: history tracked here)
-  const [messages, setMessages] = useState([
-    {
-      id: 0,
-      role: 'bot',
-      content:
-        'Namaste! 🙏 I am NyayBot, your free AI legal assistant for India.\n\nDescribe your legal problem in Hindi, English, or Tamil — for example:\n• "Landlord ne deposit wapas nahi kiya"\n• "My employer has not paid my salary for 2 months"\n• "I received a defective product online"\n\nI will identify the applicable Indian law and explain your rights in simple language.',
-      is_structured: false,
-    },
-  ]);
-
-  const nextId = useRef(1);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const chatEndRef = useRef(null);
-
-  // Feature 3: Language selector
-  const [language, setLanguage] = useState('auto');
-
-  // Feature 8: Mobile sidebar state
-  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const isMobile = windowWidth < 768;
-
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  function acceptDisclaimer() {
-    localStorage.setItem(DISCLAIMER_ACCEPTED_KEY, 'true');
-    setDisclaimerAccepted(true);
-  }
-
-  // Feature 2: Build history for the API call
-  function buildHistory() {
-    return messages.slice(1).map((m) => ({
-      role: m.role === 'bot' ? 'assistant' : 'user',
-      // Use summary (structured) or content (plain) as the history text
-      content: m.role === 'bot' ? (m.summary || m.content) : m.content,
-    }));
-  }
-
-  async function handleSend() {
-    const text = input.trim();
-    if (!text || loading) return;
-
-    setInput('');
-    const userMsgId = nextId.current++;
-    setMessages((prev) => [...prev, { id: userMsgId, role: 'user', content: text }]);
-    setLoading(true);
-
-    try {
-      // buildHistory() returns all previous turns (React state not yet updated
-      // with the current message, so no need to manually add/remove it)
-      const history = buildHistory();
-
-      const data = await sendChatMessage(text, history, language);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextId.current++,
-          role: 'bot',
-          content: data.reply || data.summary,
-          is_structured: data.is_structured,
-          applicable_law: data.applicable_law,
-          summary: data.summary,
-          next_steps: data.next_steps,
-          disclaimer: data.disclaimer,
-          userMessage: text,
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextId.current++,
-          role: 'bot',
-          content:
-            '❌ Sorry, I could not connect to the server. Please make sure the NyayBot backend is running (port 8000).',
-          is_structured: false,
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }
-
-  // Feature 9: Select an example prompt
-  function handlePromptSelect(prompt) {
-    setInput(prompt);
-  }
-
-  // Feature 1: Voice result handler
-  function handleVoiceResult(transcript) {
-    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
-  }
-
-  // True if no human messages yet (only the greeting)
-  const onlyGreeting = messages.length === 1;
-
+function EmergencyBanner({ type }) {
+  const contentMap = {
+    cybercrime: { icon: <ShieldCheck size={24} />, title: 'Cybercrime Notification', desc: 'Financial or identity fraud detected. Reporting is vital.', helpline: '1930', url: 'https://cybercrime.gov.in', color: '#1e40af' },
+    domestic_violence: { icon: <Scale size={24} />, title: 'Personal Safety Protocol', desc: 'Secure legal and social protections are available immediately.', helpline: '1091 / 181', url: 'tel:1091', color: '#e11d48' },
+    medical: { icon: <ShieldCheck size={24} />, title: 'Statutory Health Priority', desc: 'Medical negligence or health risks should be reported.', helpline: '102 / 108', url: 'tel:108', color: '#15803d' },
+    police_harassment: { icon: <Gavel size={24} />, title: 'Administrative Misconduct', desc: 'Remedies against police harassment under Article 226/32.', helpline: '154 / 100', url: 'tel:100', color: '#0f172a' }
+  };
+  const info = contentMap[type] || { icon: <AlertTriangle size={24} />, title: 'Urgent Legal Priority', desc: 'Immediate statutory intervention recommended.', helpline: '15100', url: 'tel:15100', color: '#e11d48' };
   return (
-    <>
-      {/* Feature 7: Disclaimer Modal */}
-      {!disclaimerAccepted && <DisclaimerModal onAccept={acceptDisclaimer} />}
-
-      <div
-        style={{
-          display: 'flex', height: '100vh',
-          fontFamily: "'Segoe UI', system-ui, sans-serif",
-          background: '#f5f5f5', overflow: 'hidden',
-        }}
-      >
-        {/* Feature 8: Sidebar (desktop always visible, mobile as overlay) */}
-        <Sidebar
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          isMobile={isMobile}
-          language={language}
-          onLanguageChange={setLanguage}
-        />
-
-        {/* Chat area */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-
-          {/* Header */}
-          <header
-            style={{
-              background: '#fff', borderBottom: '1px solid #e0e0e0',
-              padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '10px',
-            }}
-          >
-            {/* Feature 8: Hamburger on mobile */}
-            {isMobile && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                style={{
-                  background: 'transparent', border: 'none',
-                  cursor: 'pointer', padding: '4px', display: 'flex',
-                }}
-              >
-                <Menu size={22} color="#1a237e" />
-              </button>
-            )}
-            <Scale size={20} color="#1a237e" />
-            <span style={{ fontWeight: '600', color: '#1a237e', fontSize: '15px', flex: 1 }}>
-              NyayBot — Ask your legal question
-            </span>
-          </header>
-
-          {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px' }}>
-
-            {/* Feature 9: Example prompt chips (shown when chat is empty) */}
-            {onlyGreeting && !loading && (
-              <>
-                <ChatMessage message={messages[0]} />
-                <PromptChips onSelect={handlePromptSelect} />
-              </>
-            )}
-
-            {!onlyGreeting && messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
-            ))}
-
-            {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#757575' }}>
-                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                <span style={{ fontSize: '14px' }}>NyayBot is thinking…</span>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input area */}
-          <div
-            style={{
-              background: '#fff', borderTop: '1px solid #e0e0e0',
-              padding: '12px 16px', display: 'flex', gap: '8px', alignItems: 'flex-end',
-            }}
-          >
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Describe your legal problem in Hindi, English, or Tamil…"
-              rows={2}
-              style={{
-                flex: 1, border: '1.5px solid #c5cae9', borderRadius: '12px',
-                padding: '10px 14px', fontSize: '14px', resize: 'none',
-                outline: 'none', fontFamily: 'inherit', lineHeight: '1.5',
-                color: '#212121', transition: 'border-color 0.2s',
-              }}
-              onFocus={(e) => (e.target.style.borderColor = '#1a237e')}
-              onBlur={(e) => (e.target.style.borderColor = '#c5cae9')}
-            />
-
-            {/* Feature 1: Voice input button */}
-            <VoiceButton onResult={handleVoiceResult} disabled={loading} />
-
-            <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              title="Send message"
-              style={{
-                background: loading || !input.trim() ? '#9e9e9e' : '#1a237e',
-                border: 'none', borderRadius: '12px', padding: '12px 16px',
-                cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background 0.2s', flexShrink: 0,
-              }}
-            >
-              <Send size={18} color="#fff" />
-            </button>
-          </div>
+    <div style={{ background: `${info.color}10`, border: `2px solid ${info.color}`, borderRadius: 'var(--radius)', padding: '24px', marginBottom: '32px', display: 'flex', gap: '20px', alignItems: 'flex-start', animation: 'pulse 3s infinite' }}>
+      <div style={{ background: info.color, borderRadius: '16px', padding: '12px', color: '#fff', flexShrink: 0, boxShadow: `0 8px 16px ${info.color}40` }}>{info.icon}</div>
+      <div style={{ flex: 1 }}>
+        <h4 style={{ margin: '0 0 8px', color: info.color, fontSize: '18px', fontWeight: '800', fontFamily: 'Outfit' }}>{info.title}</h4>
+        <p style={{ margin: '0 0 16px', color: info.color, fontSize: '15px', lineHeight: '1.6', opacity: 0.9 }}>{info.desc}</p>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <a href={info.url} style={{ background: info.color, color: '#fff', textDecoration: 'none', padding: '10px 20px', borderRadius: '24px', fontSize: '14px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px' }}><Phone size={14} /> Call {info.helpline}</a>
+          <a href="https://nalsa.gov.in" target="_blank" style={{ background: 'transparent', border: `1px solid ${info.color}`, color: info.color, textDecoration: 'none', padding: '10px 20px', borderRadius: '24px', fontSize: '14px', fontWeight: '800' }}>Legal Aid Portal</a>
         </div>
       </div>
-
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-        * { box-sizing: border-box; }
-        body { margin: 0; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #c5cae9; border-radius: 3px; }
-        select option { background: #1a237e; }
-      `}</style>
-    </>
+    </div>
   );
 }
 
+function LocalHelpFinder() {
+  const [district, setDistrict] = useState('');
+  return (
+    <div style={{ marginBottom: '40px' }}>
+      <h3 style={{ fontSize: '11.5px', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '18px', letterSpacing: '1.2px', fontWeight: '800' }}>Proximity Services</h3>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <MapPin size={16} color="var(--text3)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+          <input value={district} onChange={e => setDistrict(e.target.value)} placeholder="District Name" style={{ width: '100%', padding: '14px 14px 14px 36px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text)', outline: 'none', fontSize: '14px' }} />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <button onClick={() => window.open(`https://www.google.com/maps/search/Police+Station+near+${district}`, '_blank')} className="btn-hover" style={{ background: 'var(--surface-solid)', border: '1px solid var(--border-strong)', padding: '14px', borderRadius: 'var(--radius-sm)', fontSize: '13px', cursor: 'pointer', color: 'var(--text2)', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>🚔 Police</button>
+        <button onClick={() => window.open(`https://www.google.com/maps/search/District+Court+near+${district}`, '_blank')} className="btn-hover" style={{ background: 'var(--surface-solid)', border: '1px solid var(--border-strong)', padding: '14px', borderRadius: 'var(--radius-sm)', fontSize: '13px', cursor: 'pointer', color: 'var(--text2)', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>🏛️ Court</button>
+      </div>
+    </div>
+  );
+}
+
+function ECourtsTracker() {
+  const [cnr, setCnr] = useState(''); const [copied, setCopied] = useState(false);
+  return (
+    <div style={{ marginBottom: '40px' }}>
+      <h3 style={{ fontSize: '11.5px', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '18px', letterSpacing: '1.2px', fontWeight: '800' }}>Statutory Tracking</h3>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <input value={cnr} onChange={e => setCnr(e.target.value)} placeholder="CNR Number (ex: TNCH0100...)" style={{ width: '100%', padding: '14px 44px 14px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text)', fontSize: '14px', fontWeight: '600', outline: 'none' }} />
+          <button onClick={() => { navigator.clipboard.writeText(cnr); setCopied(true); setTimeout(() => setCopied(false), 2000); }} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: copied ? 'var(--green)' : 'var(--text3)' }}><Copy size={16} /></button>
+        </div>
+        <button onClick={() => window.open('https://services.ecourts.gov.in/ecourt_india_v7/', '_blank')} className="btn-hover" style={{ background: 'var(--secondary)', color: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: 'none', padding: '0 16px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}><ChevronRight size={22} /></button>
+      </div>
+      <p style={{ fontSize: '12px', color: 'var(--text3)', marginTop: '12px', lineHeight: '1.4' }}>Use the <strong>eCourts Portal</strong> to verify the live status of your case using the CNR.</p>
+    </div>
+  );
+}
+
+function StructuredResponse({ data }) {
+  return (
+    <div style={{ animation: 'fadeIn 0.5s ease', width: '100%' }}>
+      {data.is_urgent && <EmergencyBanner type={data.emergency_type} />}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ background: 'var(--primary-light)', padding: '10px 20px', borderRadius: '32px', border: '1px solid var(--border-glow)', display: 'flex', gap: '10px', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
+          <Scale size={16} color="var(--primary)" />
+          <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.2px' }}>{data.applicable_law}</span>
+        </div>
+        <VoiceOutputButton text={data.summary} />
+      </div>
+
+      <div style={{ background: 'var(--bg-app)', padding: '24px', borderRadius: '20px', border: '1px solid var(--border)', marginBottom: '24px' }}>
+        <p style={{ margin: 0, lineHeight: '1.8', color: 'var(--text)', fontSize: '15.5px', whiteSpace: 'pre-wrap', fontWeight: '500' }}>{data.summary}</p>
+      </div>
+
+      {data.next_steps && <ActionTimeline steps={data.next_steps} />}
+
+      {data.disclaimer && (
+        <div style={{ marginTop: '32px', fontSize: '13px', color: 'var(--text3)', fontStyle: 'italic', background: 'var(--gold-bg)', padding: '16px 20px', borderRadius: '16px', border: '1px solid var(--border-glow)', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+          <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <span>{data.disclaimer}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatMessage({ message }) {
+  const isUser = message.role === 'user';
+  return (
+    <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', flexDirection: isUser ? 'row-reverse' : 'row', alignItems: 'flex-start', animation: 'messagePop 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+      <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: isUser ? 'var(--primary)' : 'var(--surface-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--border-strong)', boxShadow: 'var(--shadow-sm)' }}>
+        {isUser ? <User size={20} color="#fff" /> : <Bot size={20} color="var(--primary)" />}
+      </div>
+      <div
+        className={isUser ? "" : "premium-card"}
+        style={{
+          maxWidth: '85%',
+          background: isUser ? 'var(--primary)' : 'var(--surface-solid)',
+          color: isUser ? '#fff' : 'var(--text)',
+          borderRadius: isUser ? '20px 4px 20px 20px' : '4px 20px 20px 20px',
+          padding: '24px',
+          border: '1px solid var(--border-strong)',
+          boxShadow: isUser ? 'var(--shadow-primary)' : 'var(--shadow)'
+        }}
+      >
+        {message.is_structured ? (
+          <StructuredResponse data={message} />
+        ) : (
+          <div style={{ fontSize: '15.5px', lineHeight: '1.7', whiteSpace: 'pre-wrap', fontWeight: isUser ? '600' : '500', letterSpacing: '-0.1px' }}>
+            {message.content}
+            {message.is_streaming && (
+              <div style={{ marginTop: '12px' }}>
+                <div className="stream-cursor" />
+                <TacticalReasoningLoader stepState={message.step || 0} />
+              </div>
+            )}
+          </div>
+        )}
+        {!isUser && !message.is_structured && (
+          <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
+            <VoiceOutputButton text={message.content} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PromptChips({ onSelect }) {
+  return (
+    <div style={{ marginTop: '32px', display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center', maxWidth: '640px', margin: '32px auto 0' }}>
+      {EXAMPLE_PROMPTS.map(p => (
+        <button
+          key={p.text}
+          onClick={() => onSelect(p.text)}
+          className="btn-hover focus-ring"
+          style={{ background: 'var(--surface-solid)', border: '1px solid var(--border-strong)', borderRadius: '100px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer', color: 'var(--text2)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' }}
+        >
+          <span style={{ color: 'var(--primary)', opacity: 0.8 }}>{p.icon}</span> {p.text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MetricItem({ label, value }) {
+  return (
+    <div>
+      <p style={{ margin: 0, fontSize: '8px', fontWeight: '900', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '2px' }}>{label}</p>
+      <p style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--text)' }}>{value}</p>
+    </div>
+  );
+}
+
+function PremiumSelect({ value, onChange, options, icon: Icon, openUp = false }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(o => o.value === value) || options[0];
+
+  return (
+    <div className="custom-select-container" ref={containerRef}>
+      <div 
+        className="custom-select-trigger" 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ paddingLeft: Icon ? '44px' : '16px' }}
+      >
+        {Icon && <Icon size={16} color="var(--primary)" style={{ position: 'absolute', left: '16px' }} />}
+        <span>{selectedOption.label}</span>
+        <ChevronRight size={16} style={{ 
+          transform: isOpen ? (openUp ? 'rotate(90deg)' : 'rotate(-90deg)') : (openUp ? 'rotate(-90deg)' : 'rotate(90deg)'), 
+          transition: 'transform 0.3s ease',
+          opacity: 0.6
+        }} />
+      </div>
+
+      {isOpen && (
+        <div 
+          className="custom-select-options" 
+          style={{ 
+            top: openUp ? 'auto' : 'calc(100% + 8px)', 
+            bottom: openUp ? 'calc(100% + 8px)' : 'auto',
+            transformOrigin: openUp ? 'bottom' : 'top'
+          }}
+        >
+          {options.map(opt => (
+            <div 
+              key={opt.value}
+              className={`custom-select-option ${opt.value === value ? 'selected' : ''}`}
+              onClick={() => { onChange(opt.value); setIsOpen(false); }}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LanguageSelector({ value, onChange }) {
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      <p style={{ margin: 0, fontSize: '10px', fontWeight: '800', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '1px' }}>Linguistic Node</p>
+      <PremiumSelect 
+        value={value} 
+        onChange={onChange} 
+        options={LANGUAGE_OPTIONS} 
+        icon={Globe}
+        openUp={true}
+      />
+    </div>
+  );
+}
+
+/**
+ * Statutory News Ticker - Flagship Feature
+ */
+function StatutoryTicker() {
+  return (
+    <div className="ticker-wrap" style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ background: 'var(--primary)', color: '#fff', padding: '8px 16px', fontSize: '10px', fontWeight: '900', zIndex: 10, display: 'flex', alignItems: 'center', gap: '6px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ width: '6px', height: '6px', background: '#fff', borderRadius: '50%', animation: 'blink 1s infinite' }} />
+        LIVE BRIEFING
+      </div>
+      <div className="ticker-content" style={{ flex: 1 }}>
+        {[...LEGAL_NEWS, ...LEGAL_NEWS].map((news, i) => (
+          <div key={`${news.id}-${i}`} className="ticker-item">
+            <span style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: '900' }}>{news.tag}</span>
+            <span style={{ opacity: 0.5, fontSize: '10px' }}>[{news.source}]</span>
+            <span style={{ color: 'var(--text2)', fontSize: '11px' }}>{news.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tactical Reasoning Loader - High-End Minimalist UI
+ */
+function TacticalReasoningLoader({ stepState = 0 }) {
+  const steps = [
+    "NEURAL_BOOT",
+    "STATUTORY_SCAN",
+    "STRATEGY_SYNTH",
+    "EXEC_ENCODE"
+  ];
+  const labels = [
+    "Consulting IPC/CPC Nodes",
+    "Analyzing Judicial Precedents",
+    "Optimizing Procedural Roadmap",
+    "Finalizing Statutory Brief"
+  ];
+
+  return (
+    <div className="tactical-loader">
+      <div className="loader-label">
+        <span>{steps[stepState % steps.length]}</span>
+        <span style={{ opacity: 0.6 }}>{Math.min(99, Math.floor((stepState / 4) * 100))}%</span>
+      </div>
+      <div className="loader-bar-bg">
+        <div className="loader-bar-fill" />
+      </div>
+      <p style={{ margin: 0, fontSize: '11px', color: 'var(--text3)', fontWeight: '700', letterSpacing: '0.2px', opacity: 0.8 }}>
+        {labels[stepState % labels.length]}...
+      </p>
+    </div>
+  );
+}
+
+function VoiceButton({ onResult, disabled }) {
+  const [isListening, setIsListening] = useState(false);
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert('Speech recognition not supported in this browser.');
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.onresult = e => { onResult(e.results[0][0].transcript); setIsListening(false); };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognition.start();
+    setIsListening(true);
+  };
+  return (
+    <button
+      onClick={isListening ? null : startListening}
+      disabled={disabled}
+      className="btn-hover"
+      style={{ background: isListening ? 'var(--danger)' : 'var(--primary-light)', border: '1px solid var(--border-strong)', borderRadius: '14px', padding: '12px', cursor: 'pointer', color: isListening ? '#fff' : 'var(--primary)', transition: 'all 0.4s ease', boxShadow: isListening ? '0 0 20px var(--danger)40' : 'none' }}
+    >
+      {isListening ? <MicOff size={22} className="pulse" /> : <Mic size={22} />}
+    </button>
+  );
+}
+
+export default function App() {
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => localStorage.getItem(DISCLAIMER_ACCEPTED_KEY) === 'true');
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [modalState, setModalState] = useState('closed'); // 'closed', 'details', 'preview'
+  const [docType, setDocType] = useState('notice');
+  const [language, setLanguage] = useState('auto');
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
+  const [sessions, setSessions] = useState(() => JSON.parse(localStorage.getItem(SESSIONS_STORAGE_KEY) || '[]'));
+  const [activeSessionId, setActiveSessionId] = useState(null);
+
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.className = theme;
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // Persistent Session Sync
+  useEffect(() => {
+    if (messages.length === 0) return;
+    let id = activeSessionId || `session_${Date.now()}`;
+    if (!activeSessionId) setActiveSessionId(id);
+    
+    setSessions(prev => {
+      const copy = [...prev];
+      const idx = copy.findIndex(s => s.id === id);
+      const title = messages.find(m => m.role === 'user')?.content.substring(0, 32) + '...';
+      const sessionData = { id, title, messages, timestamp: Date.now() };
+      if (idx >= 0) copy[idx] = sessionData;
+      else copy.unshift(sessionData);
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(copy));
+      return copy;
+    });
+  }, [messages]);
+
+  const handleSend = async (providedText = null) => {
+    const userText = providedText || input;
+    if (!userText.trim() || loading) return;
+
+    setInput('');
+    const requestId = Date.now();
+    const newMessage = { id: requestId, role: 'user', content: userText };
+    setMessages(prev => [...prev, newMessage]);
+    setLoading(true);
+
+    // Add temporary bot message for streaming
+    const botId = requestId + 1;
+    setMessages(prev => [...prev, { id: botId, role: 'bot', content: '', is_streaming: true, step: 0 }]);
+
+    try {
+      const stream = await streamChatMessage(userText, messages.slice(-12), language);
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      let stepCounter = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        fullContent += chunk;
+        stepCounter++;
+
+        // Extract only the summary part while streaming
+        let displayContent = fullContent;
+        const match = fullContent.match(/"summary":\s*"((?:[^"\\]|\\.)*)/);
+        if (match && match[1]) {
+          displayContent = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        } else if (fullContent.includes('{')) {
+          displayContent = "Initializing intelligence nodes...";
+        }
+
+        // Update the bot message with current content
+        setMessages(prev =>
+          prev.map(m => m.id === botId ? { ...m, content: displayContent, step: Math.floor(stepCounter / 5) } : m)
+        );
+      }
+
+      // Once done, try to parse fullContent as JSON
+      let result = { reply: fullContent, summary: fullContent, is_structured: false };
+      try {
+        // Find JSON boundaries
+        const start = fullContent.indexOf('{');
+        const end = fullContent.lastIndexOf('}') + 1;
+        if (start !== -1 && end !== -1) {
+          const jsonStr = fullContent.substring(start, end);
+          const data = JSON.parse(jsonStr);
+          result = { ...data, reply: data.summary, is_structured: true };
+        }
+      } catch (e) {
+        console.error("JSON Parse Error during stream completion:", e);
+      }
+
+      setMessages(prev =>
+        prev.map(m => m.id === botId ? { ...m, ...result, id: botId, role: 'bot', userMessage: userText, is_streaming: false } : m)
+      );
+
+    } catch (e) {
+      console.error("Stream Error:", e);
+      setMessages(prev =>
+        prev.map(m => m.id === botId ? { ...m, content: 'The legal processing node encountered an error. Please retry.', is_streaming: false } : m)
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startNewCase = () => {
+    setActiveSessionId(null);
+    setMessages([]);
+  };
+
+  const deleteSession = (id, e) => {
+    e.stopPropagation();
+    setSessions(prev => {
+      const next = prev.filter(s => s.id !== id);
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+    if (activeSessionId === id) startNewCase();
+  };
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg-app)', color: 'var(--text)' }}>
+      <div className="mesh-background" />
+
+      {!disclaimerAccepted && (
+        <DisclaimerModal onAccept={() => { localStorage.setItem(DISCLAIMER_ACCEPTED_KEY, 'true'); setDisclaimerAccepted(true); }} />
+      )}
+
+      {/* 1. Sidebar - Intelligence Vault */}
+      <aside
+        style={{
+          width: '320px', flexShrink: 0, borderRight: '1px solid var(--border-strong)',
+          display: 'flex', flexDirection: 'column',
+          background: 'var(--surface)', backdropFilter: 'blur(30px)',
+          zIndex: 50
+        }}
+      >
+        <div style={{ padding: '32px 24px', flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }} className="no-scrollbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' }}>
+            <div style={{ background: 'var(--primary)', padding: '10px', borderRadius: '12px', boxShadow: 'var(--shadow-primary)' }}>
+              <Scale size={22} color="#fff" />
+            </div>
+            <span style={{ fontWeight: '800', fontSize: '22px', fontFamily: 'Outfit' }}>NyayBot</span>
+          </div>
+
+          <button
+            onClick={startNewCase}
+            className="btn-hover focus-ring"
+            style={{ width: '100%', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '16px', fontWeight: '700', marginBottom: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '15px' }}
+          >
+            <Plus size={18} /> New Case Query
+          </button>
+
+          <div style={{ flex: 1 }}>
+            <h3 style={{ fontSize: '11px', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '0.1em' }}>History</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {sessions.length === 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
+                  <Clock size={24} style={{ marginBottom: '8px', margin: '0 auto' }} />
+                  <p style={{ fontSize: '12px' }}>No history yet</p>
+                </div>
+              )}
+              {sessions.map(s => (
+                <div
+                  key={s.id}
+                  onClick={() => { setActiveSessionId(s.id); setMessages(s.messages); }}
+                  className="btn-hover"
+                  style={{
+                    background: activeSessionId === s.id ? 'var(--primary-light)' : 'transparent',
+                    padding: '12px 14px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                    border: '1px solid', borderColor: activeSessionId === s.id ? 'var(--primary)' : 'transparent',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                    <FileText size={14} color={activeSessionId === s.id ? 'var(--primary)' : 'var(--text3)'} />
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: activeSessionId === s.id ? 'var(--text)' : 'var(--text2)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{s.title}</span>
+                  </div>
+                  <button onClick={(e) => deleteSession(s.id, e)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--danger)', opacity: 0.7 }}><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '24px 24px 40px', borderTop: '1px solid var(--border-strong)', background: 'rgba(255,255,255,0.02)' }}>
+          {/* Strategic Metrics Dashboard */}
+          {messages.length > 0 && (
+            <div style={{ marginBottom: '24px', padding: '16px', background: 'var(--primary-light)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-glow)', animation: 'fadeIn 0.5s ease' }}>
+              <h3 style={{ fontSize: '10px', fontWeight: '900', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                Strategic Metrics
+                {(loading || messages.some(m => m.is_streaming)) && <span className="blink">SCANNING...</span>}
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {(() => {
+                  const lastBot = [...messages].reverse().find(m => m.role === 'bot' && m.strategic_metrics);
+                  const metrics = lastBot ? lastBot.strategic_metrics : { urgency: '...', merit: '...', posture: '...', complexity: '...' };
+                  return (
+                    <>
+                      <MetricItem label="URGENCY" value={metrics.urgency} />
+                      <MetricItem label="LEGAL MERIT" value={metrics.merit} />
+                      <MetricItem label="POSTURE" value={metrics.posture} />
+                      <MetricItem label="COMPLEXITY" value={metrics.complexity} />
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          <LanguageSelector value={language} onChange={setLanguage} />
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+              className="btn-hover"
+              style={{ flex: 1, background: 'var(--surface-solid)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: '600', color: 'var(--text2)', fontSize: '13px' }}
+            >
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+              {theme === 'light' ? 'Dark' : 'Light'}
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* 2. Main Workspace - Intelligence Canvas */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+        <StatutoryTicker />
+        <header style={{ padding: '24px 40px', borderBottom: '1px solid var(--border-strong)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', backdropFilter: 'blur(10px)', zIndex: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Sparkles size={18} color="var(--primary)" />
+            <h2 style={{ fontSize: '16px', fontWeight: '700' }}>{activeSessionId ? 'Case Intel' : 'Statutory Query'}</h2>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ background: 'var(--green)10', color: 'var(--green)', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800', border: '1px solid var(--green)30' }}>SECURE NODE</div>
+          </div>
+        </header>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '40px 0', scrollBehavior: 'smooth' }} className="no-scrollbar">
+          <div style={{ maxWidth: '800px', margin: '0 auto', padding: '0 40px' }}>
+            {messages.length === 0 && (
+              <div style={{ textAlign: 'center', marginTop: '10vh', animation: 'fadeIn 1s ease' }}>
+                <div style={{ display: 'inline-flex', padding: '24px', background: 'var(--surface-solid)', borderRadius: '32px', boxShadow: 'var(--shadow-lg)', marginBottom: '32px', border: '1px solid var(--border-strong)' }}>
+                  <Gavel size={64} style={{ color: 'var(--primary)' }} />
+                </div>
+                <h1 className="shimmer-text" style={{ fontSize: '56px', fontWeight: '900', marginBottom: '16px', letterSpacing: '-0.03em', fontFamily: 'Outfit' }}>NyayBot</h1>
+                <p style={{ color: 'var(--text3)', fontSize: '20px', maxWidth: '540px', margin: '0 auto 48px', fontWeight: '600', lineHeight: '1.6' }}>The high-fidelity intelligence hub for Indian legal strategy and statutory analysis.</p>
+                <PromptChips onSelect={handleSend} />
+              </div>
+            )}
+
+            {messages.map(m => <ChatMessage key={m.id} message={m} />)}
+
+            <div ref={chatEndRef} style={{ height: '140px' }} />
+          </div>
+        </div>
+
+        {/* Improved Command Input Bar */}
+        <div style={{ position: 'absolute', bottom: '32px', left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '0 40px', zIndex: 100 }}>
+          <div
+            className="glass-panel"
+            style={{
+              borderRadius: '24px', padding: '8px 8px 8px 16px',
+              display: 'flex', gap: '16px', width: '100%', maxWidth: '800px',
+              boxShadow: 'var(--shadow-lg)', alignItems: 'center',
+              border: '1px solid var(--border-strong)'
+            }}
+          >
+            <VoiceButton onResult={setInput} disabled={loading} />
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+              placeholder="Describe your legal situation..."
+              style={{ flex: 1, background: 'transparent', border: 'none', color: 'var(--text)', outline: 'none', resize: 'none', fontSize: '16px', padding: '12px 0', maxHeight: '120px', minHeight: '24px', fontWeight: '500' }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="btn-hover"
+              style={{ background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '16px', padding: '12px 24px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', fontSize: '14px', boxShadow: 'var(--shadow-primary)' }}
+            >
+              Analyze <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      </main>
+
+      {/* 3. Right Action Center - Decision Context */}
+      <aside
+        style={{ width: '380px', flexShrink: 0, borderLeft: '1px solid var(--border-strong)', background: 'var(--surface)', backdropFilter: 'blur(30px)', display: 'flex', flexDirection: 'column', position: 'relative' }}
+      >
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '40px', background: 'linear-gradient(transparent, var(--bg-app))', pointerEvents: 'none', zIndex: 10, opacity: 0.5 }} />
+        <div style={{ padding: '32px 24px', flex: 1, overflowY: 'auto' }} className="no-scrollbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+            <div style={{ position: 'relative' }}>
+              <ShieldCheck size={22} color="var(--primary)" />
+              <div style={{ position: 'absolute', top: -4, right: -4, width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%', border: '2px solid var(--surface)' }} />
+            </div>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>Action Center</h2>
+            {loading && <div className="neural-scanning-bar" />}
+          </div>
+
+          {messages.slice().reverse().find(m => m.is_structured) ? (
+            <div style={{ animation: 'slideInFromRight 0.5s ease' }}>
+              <div className="premium-card" style={{ padding: '24px', marginBottom: '24px', border: '1px solid var(--border-glow)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Statutory Insight</h3>
+                  <div style={{ background: 'var(--primary-light)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: '900' }}>VERIFIED</div>
+                </div>
+                <StructuredResponse data={messages.slice().reverse().find(m => m.is_structured)} />
+              </div>
+
+              <div className="premium-card" style={{ padding: '24px', border: '1px solid var(--primary-light)', background: 'linear-gradient(to bottom right, var(--primary-light), transparent)' }}>
+                <h3 style={{ fontSize: '11px', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '0.1em' }}>Intelligence Suite</h3>
+                <p style={{ fontSize: '14px', color: 'var(--text2)', marginBottom: '20px', lineHeight: '1.6', fontWeight: '500' }}>Executive-grade documentation engine initialized for this case.</p>
+                <PDFButton
+                  onClick={() => setModalState('details')}
+                  loading={pdfLoading}
+                />
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '80px 24px', animation: 'fadeIn 1s ease' }}>
+              <div style={{ position: 'relative', display: 'inline-block', marginBottom: '32px' }}>
+                <Archive size={64} style={{ color: 'var(--text3)', opacity: 0.2 }} />
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Search size={24} style={{ color: 'var(--primary)', opacity: 0.5, animation: 'reasoningPulse 2s infinite' }} />
+                </div>
+              </div>
+              <h4 style={{ color: 'var(--text)', fontSize: '16px', fontWeight: '800', marginBottom: '8px' }}>Analysis Requested</h4>
+              <p style={{ color: 'var(--text3)', fontSize: '14px', fontWeight: '500', lineHeight: '1.6' }}>The strategic action layer will activate once a legal scenario is identified in the query.</p>
+            </div>
+          )}
+
+          <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-strong)', paddingTop: '48px' }}>
+            <LocalHelpFinder />
+            <ECourtsTracker />
+          </div>
+        </div>
+      </aside>
+
+      {/* 4. Global Intelligence Modals */}
+      {modalState === 'details' && (
+        <NoticeDetailsModal 
+          docType={docType}
+          setDocType={setDocType}
+          onCancel={() => setModalState('closed')}
+          onGenerate={async (details) => {
+            setModalState('closed');
+            setPdfLoading(true);
+            try {
+              const lastStructured = messages.slice().reverse().find(m => m.is_structured);
+              const blob = await generatePDF({
+                applicable_law: lastStructured.applicable_law,
+                complaint_text: lastStructured.formal_draft || lastStructured.userMessage,
+                user_language: 'English',
+                ...details,
+                document_type: docType
+              });
+              const url = URL.createObjectURL(blob);
+              setPdfUrl(url);
+              setModalState('preview');
+            } catch (e) {
+              console.error(e);
+            } finally {
+              setPdfLoading(false);
+            }
+          }}
+        />
+      )}
+
+      {modalState === 'preview' && pdfUrl && (
+        <PDFPreviewModal
+          pdfUrl={pdfUrl}
+          onDownload={() => {
+            const a = document.createElement('a');
+            a.href = pdfUrl;
+            a.download = `NyayBot_${docType}.pdf`;
+            a.click();
+            setModalState('closed');
+          }}
+          onCancel={() => setModalState('closed')}
+        />
+      )}
+    </div>
+  );
+}

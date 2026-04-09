@@ -44,7 +44,13 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     applicable_law: str = ""
+    act_description: str = ""
+    precedent_case: str = ""
+    precedent_reasoning: str = ""
     summary: str = ""
+    formal_draft: str = ""
+    is_urgent: bool = False
+    emergency_type: str = "none"
     next_steps: List[str] = []
     disclaimer: str = ""
     is_structured: bool = False
@@ -58,6 +64,7 @@ class GeneratePDFRequest(BaseModel):
     respondent_name: str = ""
     complainant_address: str = ""
     respondent_address: str = ""
+    document_type: str = "notice"
 
 
 # ---------------------------------------------------------------------------
@@ -69,33 +76,32 @@ def root():
     return {"message": "NyayBot API is running. Visit /docs for the interactive API docs."}
 
 
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
+from fastapi.responses import Response, JSONResponse, StreamingResponse
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
     """
-    Accept a user message (with optional conversation history) and return
-    structured legal advice from the LLM (Groq-hosted Llama 3).
-    Multi-turn history is passed so the LLM can maintain conversational context.
+    Returns a StreamingResponse of legal advice tokens.
     """
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     history = [{"role": h.role, "content": h.content} for h in request.history]
 
-    try:
-        result = get_legal_advice(
-            user_message=request.message,
-            history=history,
-            language=request.language,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Error communicating with the AI provider: {str(e)}",
-        )
+    from llm_service import get_legal_advice_stream
 
-    return ChatResponse(**result)
+    def stream_generator():
+        try:
+            for chunk in get_legal_advice_stream(
+                user_message=request.message,
+                history=history,
+                language=request.language,
+            ):
+                yield chunk
+        except Exception as e:
+            yield f"Error: {str(e)}"
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/generate-pdf")
@@ -112,6 +118,7 @@ def generate_pdf(request: GeneratePDFRequest):
 
     try:
         pdf_bytes = generate_legal_notice_pdf(
+            document_type=request.document_type,
             applicable_law=request.applicable_law,
             complaint_text=request.complaint_text,
             user_language=request.user_language,
