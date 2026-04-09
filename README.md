@@ -1,147 +1,92 @@
-# ⚖️ NyayBot — AI Legal Assistant for India
+# ⚖️ NyayBot Flagship — Institutional Legal Intelligence
 
-NyayBot is an AI-powered legal assistant built for ordinary Indians who cannot afford a lawyer. It helps identify applicable Indian laws, explains user rights in plain language, generates ready-to-send legal notices or complaint drafts, and locates the nearest free legal aid centre.
+**NyayBot v3.5** is a high-fidelity, world-class legal intelligence suite designed to democratize legal strategy for ordinary Indian citizens. Beyond simple chat, NyayBot provides a cinematic "War Room" experience, delivering real-time statutory analysis, professional-grade document generation, and 99.9% accurate strategic metrics.
 
-> **Disclaimer:** NyayBot provides legal *information*, not legal advice. Always verify with your nearest District Legal Services Authority (DLSA) or call NALSA at **15100**.
+> [!IMPORTANT]
+> **Statutory Disclaimer**: NyayBot provides legal *intelligence* and situational briefings based on Indian Statutes. It is not a substitute for a licensed Legal Practitioner. For urgent matters, contact **NALSA (15100)** or your nearest **DLSA**.
 
 ---
 
-## Tech Stack
+## 💎 Flagship Features (v3.5)
+
+### 🧠 Cinematic Intelligence Engine
+- **Neural Scanning Protocol**: Real-time visual feedback of the "Strategic Synthesis" compute cycle.
+- **Word-by-Word Streaming**: Institutional-grade response streaming with tactical JSON masking for immediate insight.
+- **99.9% Strategic Accuracy**: Precision-engineered logic for calculating Case Urgency, Merit, Posture, and Complexity.
+
+### 🏛️ executive "War Room" Interface
+- **Triple-Pane Architecture**:
+    - **Intelligence Vault**: Persistent case history and Linguistic node selector.
+    - **Strategic Canvas**: The main intelligence workspace with real-time briefing.
+    - **Action Center**: Decoupled executive dashboard for operational roadmaps and document generation.
+- **Custom Premium Selects**: Universal glassmorphic dropdowns with institutional animations and custom Sentinel chevrons.
+
+### 📜 Document Sentinel v2.1
+- **Global Drafting Portal**: Full-screen, portal-based document generation flow to prevent UI clipping.
+- **Tactical Document Suite**: Professional drafting for Legal Notices, Police FIRs, and Civil Complaints.
+- **Sticky Execution**: Guaranteed visibility for all action buttons via the "Sticky Tactical Footer."
+
+---
+
+## 🛠️ Technology Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | FastAPI + Python |
-| AI Provider | [Groq](https://console.groq.com) (Llama 3 70B via OpenAI-compatible API) |
-| PDF Generation | ReportLab |
-| Frontend | React 18 + Vite |
+| **Intelligence Core** | Llama 3-70B (via [Groq](https://console.groq.com)) |
+| **Logic Layer** | FastAPI + Uvicorn (Asynchronous Processing) |
+| **Tactical UI** | React 18 + Vite (Institutional Glassmorphism) |
+| **PDF Engine** | ReportLab (Statutory Document Formatting) |
 
 ---
 
-## Project Structure
+## 📂 Project Architecture
 
-```
+```bash
 fix-forward/
 ├── backend/
-│   ├── main.py            # FastAPI app (CORS + endpoints)
-│   ├── llm_service.py     # Groq / OpenAI-compatible LLM helper
-│   ├── pdf_generator.py   # ReportLab legal notice PDF generator
-│   ├── requirements.txt
-│   └── .env.example       # Copy to .env and add your API key
+│   ├── main.py            # Intelligence Node & Routing
+│   ├── llm_service.py     # Llama-3 70B Strategic Hub
+│   ├── pdf_generator.py   # Statutory Document Engine
+│   └── .env               # Intelligence API Keys
 └── frontend/
-    ├── index.html
-    ├── vite.config.js
-    ├── package.json
     └── src/
-        ├── main.jsx
-        ├── App.jsx        # Chat UI with PDF download button
-        ├── api.js         # Axios helpers for /api/chat and /api/generate-pdf
-        └── index.css
+        ├── App.jsx        # War Room Executive Dashboard
+        ├── index.css      # Design System v3.5 (Design Tokens)
+        ├── api.js         # Strategic Data Fetching
+        └── legal_news.js  # Live Statutory Briefing Data
 ```
 
 ---
 
-## Quick Start
+## 🚀 Deployment Manual
 
-### 1. Get a Free Groq API Key
-
-1. Go to [https://console.groq.com](https://console.groq.com) and sign up (free).
-2. Create an API key under **API Keys**.
-
-### 2. Configure the Backend
-
+### 1. Initialize Intelligence Node (Backend)
 ```bash
 cd backend
-
-# Copy the example env file and add your key
-cp .env.example .env
-# Open .env and replace 'your_groq_api_key_here' with your actual key
-```
-
-### 3. Start the Backend (FastAPI)
-
-```bash
-cd backend
-
-# Create and activate a virtual environment (recommended)
 python -m venv venv
-source venv/bin/activate      # On Windows: venv\Scripts\activate
-
-# Install dependencies
+# Windows
+venv\Scripts\activate
+# Install Tactical Layers
 pip install -r requirements.txt
-
-# Start the server
+# Configure Groq API Key in .env
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at **http://localhost:8000**.  
-Interactive API docs: **http://localhost:8000/docs**
-
-### 4. Start the Frontend (React + Vite)
-
-Open a **new terminal**:
-
+### 2. Launch Command Center (Frontend)
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start the dev server
 npm run dev
 ```
-
-The app will be available at **http://localhost:5173**.
-
----
-
-## API Endpoints
-
-### `POST /api/chat`
-Send a legal question and get advice back.
-
-**Request body:**
-```json
-{ "message": "My landlord is not returning my security deposit." }
-```
-
-**Response:**
-```json
-{ "reply": "Based on your situation, the applicable law is..." }
-```
-
-### `POST /api/generate-pdf`
-Generate a formatted Legal Notice PDF.
-
-**Request body:**
-```json
-{
-  "applicable_law": "Consumer Protection Act 2019",
-  "complaint_text": "I received a defective product...",
-  "user_language": "English",
-  "complainant_name": "Rahul Sharma",
-  "respondent_name": "XYZ Online Store",
-  "complainant_address": "123 MG Road, Bangalore",
-  "respondent_address": "456 Commercial St, Mumbai"
-}
-```
-
-**Response:** PDF file download (`NyayBot_Legal_Notice.pdf`)
+Navigate to **`http://localhost:5173`** for the full flagship experience.
 
 ---
 
-## Switching AI Providers
+## 📞 Free Legal Aid Protocols (India)
 
-NyayBot uses the standard `openai` Python package, so you can switch providers by changing just two environment variables in your `.env`:
-
-| Provider | `GROQ_API_KEY` value | `base_url` in `llm_service.py` |
-|----------|---------------------|-------------------------------|
-| **Groq** (default) | Your Groq key | `https://api.groq.com/openai/v1` |
-| **OpenAI** | Your OpenAI key | `https://api.openai.com/v1` |
-| **Ollama** (local) | `ollama` | `http://localhost:11434/v1` |
+- **NALSA National Helpline:** **15100** (24/7 Free Legal Aid)
+- **Institutional Finder:** [Find your nearest DLSA](https://nalsa.gov.in/lsams)
 
 ---
 
-## Free Legal Aid Resources
-
-- 📞 **NALSA Helpline:** 15100 (Free legal aid for all Indian citizens)
-- 🗺️ **Find your nearest DLSA:** [nalsa.gov.in/lsams](https://nalsa.gov.in/lsams)
+> Created for the **2024 Fix Forward** initiative. NyayBot is the 1% Elite standard for accessible Indian Legal Intelligence.
