@@ -6,7 +6,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+if not GROQ_API_KEY:
+    print("CRITICAL: GROQ_API_KEY not found in environment!")
+else:
+    print(f"DIAGNOSTIC: GROQ_API_KEY found (Initial: {GROQ_API_KEY[:4]}...{GROQ_API_KEY[-4:]})")
 
 SYSTEM_PROMPT = """You are NyayBot, a world-class institutional legal AI for India. Your objective is to provide executive-grade legal strategy OR direct factual lookups based on user intent.
 
@@ -25,18 +30,18 @@ RULES:
 
 JSON STRUCTURE:
 {
-  "applicable_law": "Full name of the Indian Statute",
-  "act_description": "Purpose of the act.",
-  "precedent_case": "Relevant Landmark Verdict.",
-  "precedent_reasoning": "Application ratio.",
-  "summary": "Direct answer or Executive brief.",
-  "is_urgent": boolean,
+  "summary": "Direct answer or Executive brief (Stream this first).",
   "strategic_metrics": {
     "urgency": "CRITICAL",
     "merit": "85%",
     "posture": "AGGRESSIVE",
     "complexity": "HIGH"
   },
+  "applicable_law": "Full name of the Indian Statute",
+  "act_description": "Purpose of the act.",
+  "precedent_case": "Relevant Landmark Verdict.",
+  "precedent_reasoning": "Application ratio.",
+  "is_urgent": boolean,
   "formal_draft": "Professional drafting sample.",
   "emergency_type": "cybercrime" | "domestic_violence" | "medical" | "police_harassment" | "none",
   "next_steps": [{"title": "Step Title", "description": "Specific action"}],
@@ -112,15 +117,14 @@ def parse_legal_json(raw: str) -> dict:
     try:
         result = json.loads(cleaned)
         return {
-            "reply": result.get("summary", ""),
+            "summary": result.get("summary", ""),
+            "strategic_metrics": result.get("strategic_metrics", {}),
             "applicable_law": result.get("applicable_law", ""),
             "act_description": result.get("act_description", ""),
             "precedent_case": result.get("precedent_case", ""),
             "precedent_reasoning": result.get("precedent_reasoning", ""),
-            "summary": result.get("summary", ""),
             "formal_draft": result.get("formal_draft", ""),
             "is_urgent": result.get("is_urgent", False),
-            "strategic_metrics": result.get("strategic_metrics", {}),
             "emergency_type": result.get("emergency_type", "none"),
             "next_steps": result.get("next_steps", []),
             "disclaimer": result.get("disclaimer", ""),

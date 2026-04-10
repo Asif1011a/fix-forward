@@ -639,12 +639,13 @@ export default function App() {
         stepCounter++;
 
         // Extract only the summary part while streaming
-        let displayContent = fullContent;
-        const match = fullContent.match(/"summary":\s*"((?:[^"\\]|\\.)*)/);
+        let displayContent = "Initializing intelligence nodes...";
+        const summaryRegex = /"summary":\s*"((?:[^"\\]|\\.)*)/;
+        const match = fullContent.match(summaryRegex);
         if (match && match[1]) {
           displayContent = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-        } else if (fullContent.includes('{')) {
-          displayContent = "Initializing intelligence nodes...";
+        } else if (fullContent.length > 50 && !fullContent.includes('"summary"')) {
+          displayContent = "Synthesizing statutory strategy...";
         }
 
         // Update the bot message with current content
