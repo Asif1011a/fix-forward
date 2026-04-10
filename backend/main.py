@@ -78,7 +78,7 @@ def root():
 
 from fastapi.responses import Response, JSONResponse, StreamingResponse
 
-@app.post("/api/chat")
+@app.post("/chat")
 async def chat(request: ChatRequest):
     """
     Returns a StreamingResponse of legal advice tokens.
@@ -104,7 +104,7 @@ async def chat(request: ChatRequest):
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@app.post("/api/generate-pdf")
+@app.post("/generate-pdf")
 def generate_pdf(request: GeneratePDFRequest):
     """
     Accept structured information about the legal dispute and return a
@@ -139,7 +139,7 @@ def generate_pdf(request: GeneratePDFRequest):
     )
 
 
-@app.get("/api/dlsa")
+@app.get("/dlsa")
 def dlsa_search(q: Optional[str] = Query(default="", description="District or state name to search")):
     """
     Search for the nearest District Legal Services Authority (DLSA).
