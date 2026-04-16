@@ -12,6 +12,7 @@ app = FastAPI(
     title="NyayBot API",
     description="AI-powered legal assistant backend for India",
     version="0.2.0",
+    redirect_slashes=False
 )
 
 # ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ def root():
 
 from fastapi.responses import Response, JSONResponse, StreamingResponse
 
-@app.post("/chat")
+@app.post("/api/chat")
 async def chat(request: ChatRequest):
     """
     Returns a StreamingResponse of legal advice tokens.
@@ -104,7 +105,7 @@ async def chat(request: ChatRequest):
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@app.post("/generate-pdf")
+@app.post("/api/generate-pdf")
 def generate_pdf(request: GeneratePDFRequest):
     """
     Accept structured information about the legal dispute and return a
@@ -139,7 +140,7 @@ def generate_pdf(request: GeneratePDFRequest):
     )
 
 
-@app.get("/dlsa")
+@app.get("/api/dlsa")
 def dlsa_search(q: Optional[str] = Query(default="", description="District or state name to search")):
     """
     Search for the nearest District Legal Services Authority (DLSA).
